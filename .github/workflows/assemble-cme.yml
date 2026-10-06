@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - 'chunks/**'
+      - 'chunks/c*.b64'
 jobs:
   assemble:
     runs-on: ubuntu-latest
@@ -14,11 +14,12 @@ jobs:
       - name: Concatenate and decode chunks
         run: |
           set -euo pipefail
-          cat chunks/[0-9][0-9].b64 | tr -d '\n\r ' > /tmp/all.b64
+          cat chunks/c*.b64 | tr -d '\n\r ' > /tmp/all.b64
           base64 -d /tmp/all.b64 > index.html
           echo "Decoded size: $(wc -c < index.html)"
           sha1sum index.html
           grep -o '<title>[^<]*</title>' index.html || true
+          test "$(sha1sum index.html | awk '{print $1}')" = "a3a7a0155c99fee54d4110ffe61b98a91be3d80c"
       - name: Commit index.html
         run: |
           git config user.name "github-actions[bot]"
