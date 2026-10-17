@@ -1,0 +1,87 @@
+$ swiftc --version
+Swift version 6.4.1 (swift-6.4.1-RELEASE)
+Target: x86_64-unknown-linux-gnu
+$ swiftc -O BPETokenizer.swift -o tok && ./tok
+=== 1. Training ===
+  corpus: 1591 chars, 1591 bytes
+  targetVocabSize=512 (base 256 + merges); merges learned=175 (stops early when no pair occurs >= 2 times)
+  first 12 merges (rank: left + right -> new id):
+    0: " " + "t" -> 256 " t"
+    1: "h" + "e" -> 257 "he"
+    2: "i" + "n" -> 258 "in"
+    3: "e" + "r" -> 259 "er"
+    4: " " + "a" -> 260 " a"
+    5: " t" + "he" -> 261 " the"
+    6: "e" + "n" -> 262 "en"
+    7: " " + "w" -> 263 " w"
+    8: " " + "s" -> 264 " s"
+    9: "e" + "s" -> 265 "es"
+    10: " t" + "o" -> 266 " to"
+    11: "d" + "e" -> 267 "de"
+PASS: merge rank r has id 256 + r
+PASS: training is deterministic (two runs, identical merges)
+
+=== 2. Special tokens ===
+  [BOS]=431 [EOS]=432 [PAD]=433  vocabSize=434
+PASS: special ids come right after the merges, no collision  (first special id 431)
+PASS: re-registering a special returns the same id
+PASS: train() after registering specials is refused (protects ids)
+
+=== 3. Encode / decode with specials ===
+  text: "[BOS]Hello world! The tokenizer\'s merges are replayed in order.\n  Emoji 👋 too.[EOS][PAD]"
+  ids (44): [431, 72, 101, 108, 108, 111, 322, 108, 100, 33, 291, 321, 339, 306, 378, 328, 112, 108, 97, 121, 361, 281, 352, 100, 259, 46, 10, 32, 32, 69, 109, 111, 106, 105, 32, 240, 159, 145, 139, 266, 111, 46, 432, 433]
+  tokens: [BOS] | "H" | "e" | "l" | "l" | "o" | " wor" | "l" | "d" | "!" | " The" | " tokenizer" | "'s" | " merges" | " are" | " re" | "p" | "l" | "a" | "y" | "ed" | " in" | " or" | "d" | "er" | "." | "\n" | " " | " " | "E" | "m" | "o" | "j" | "i" | " " | <F0> | <9F> | <91> | <8B> | " to" | "o" | "." | [EOS] | [PAD]
+PASS: round trip with specials is exact
+PASS: allowed specials map to single reserved ids
+PASS: disallowed specials are encoded as plain text  (56 ids)
+PASS: round trip with specials disallowed is exact
+PASS: allowed-but-unregistered special is encoded as text, not dropped
+PASS: decode of an unknown id throws instead of silently skipping
+
+=== 4. Ranked encoding matches reference ===
+PASS: lowest-rank-first encoding == applying all merges in order  (175 distinct pieces checked)
+
+=== 5. Save / load JSON ===
+  saved to /workspace/tokenizer/bpe_tokenizer.json (52318 bytes)
+PASS: loaded merges identical and in the same order
+PASS: loaded vocab, specials and nextTokenId identical
+PASS: loaded tokenizer produces identical ids
+PASS: saving is stable (byte-identical JSON on re-save)
+PASS: after load, new specials continue from nextTokenId  ([SEP]=434)
+  corrupt file rejected: invalid saved model: stored vocab does not match the vocab rebuilt from merges
+PASS: corrupted JSON is rejected and leaves the tokenizer untouched
+
+=== 6. Overlapping special tokens (longest first) ===
+  ids: [97, 435, 98, 434]  tokens: "a" | <|end|> | "b" | <|end
+PASS: "<|end|>" wins over its prefix "<|end"
+PASS: overlapping specials round trip
+
+=== 7. Edge cases (exact round trip) ===
+PASS: round trip: empty string  (0 bytes -> 0 tokens)
+PASS: round trip: emoji 👋  (4 bytes -> 4 tokens)
+PASS: round trip: world's  (7 bytes -> 5 tokens)
+PASS: round trip: double spaces  (12 bytes -> 8 tokens)
+PASS: round trip: newline  (17 bytes -> 13 tokens)
+PASS: round trip: leading/trailing spaces  (12 bytes -> 9 tokens)
+PASS: round trip: only whitespace  (5 bytes -> 5 tokens)
+PASS: round trip: CJK  (15 bytes -> 15 tokens)
+PASS: round trip: combining accent  (6 bytes -> 6 tokens)
+PASS: round trip: ZWJ family emoji + flag  (27 bytes -> 27 tokens)
+PASS: round trip: digits and symbols  (31 bytes -> 30 tokens)
+PASS: empty string encodes to []
+PASS: "world's" pre-tokenizes to ["world", "'s"]
+PASS: double space keeps every space  (["hello", " ", " world"])
+  👋 -> ids [240, 159, 145, 139] tokens <F0> | <9F> | <91> | <8B>
+PASS: partial emoji bytes decode lossily to U+FFFD instead of crashing
+
+=== 8. Compression benchmark ===
+  [training corpus] chars=1591 bytes=1591 tokens=581 chars/token=2.74 bytes/token=2.74 savings=63.5%
+  [held-out English] chars=224 bytes=224 tokens=97 chars/token=2.31 bytes/token=2.31 savings=56.7%
+  [non-English + emoji] chars=13 bytes=28 tokens=28 chars/token=0.46 bytes/token=1.00 savings=0.0%
+  [empty] chars=0 bytes=0 tokens=0 chars/token=0.00 bytes/token=0.00 savings=0.0% (empty input: ratios reported as 0)
+PASS: BPE uses fewer tokens than raw bytes
+PASS: empty benchmark: no divide-by-zero
+
+=== Summary ===
+37 passed, 0 failed
+[exit code: 0]
